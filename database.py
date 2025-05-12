@@ -5,9 +5,6 @@ import psycopg2
 ##  Database Connection
 #####################################################
 
-'''
-Connect to the database using the connection string
-'''
 def openConnection():
     # connection parameters - ENTER YOUR LOGIN AND PASSWORD HERE
 
@@ -29,6 +26,29 @@ def openConnection():
     
     # return the connection to use
     return conn
+
+def executeQuery(query):
+    # Open a connection to the database
+    conn = openConnection()
+    if not conn: 
+        print("Failed to connect to the database.")
+        return []
+    try:
+        # Create a cursor object
+        cursor = conn.cursor()
+
+        # Execute the query
+        cursor.execute(query)
+
+        # Fetch all results
+        results = cursor.fetchall()
+        return results
+    except psycopg2.Error as sqle:
+        print("psycopg2.Error : " + sqle.pgerror)
+        if conn:
+            conn.rollback()
+        return []
+
 
 '''
 Validate salesperson based on username and password
@@ -60,6 +80,7 @@ def getCarSalesSummary():
     :return: A list of car sales matching the search string.
 """
 def findCarSales(searchString):
+    A = F"select .. where == {searchString}"
     return
 
 """
@@ -87,3 +108,6 @@ def addCarSale(make, model, builtYear, odometer, price):
 """
 def updateCarSale(carsaleid, customer, salesperosn, saledate):
     return
+
+if __name__ == "__main__":
+    print(executeQuery("SELECT * FROM CarSalesFormatted"))
