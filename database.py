@@ -32,7 +32,7 @@ def executeQuery(query):
     conn = openConnection()
     if not conn: 
         print("Failed to connect to the database.")
-        return []
+        return {"code": 500, "message": "Failed to connect to the database.", "data": None}
     try:
         # Create a cursor object
         cursor = conn.cursor()
@@ -42,12 +42,12 @@ def executeQuery(query):
 
         # Fetch all results
         results = cursor.fetchall()
-        return results
+        return {"code": 200, "message": "Query executed successfully.", "data": results}
     except psycopg2.Error as sqle:
         print("psycopg2.Error : " + sqle.pgerror)
         if conn:
             conn.rollback()
-        return []
+        return {"code": 500, "message": sqle.pgerror, "data": None}
 
 
 '''
