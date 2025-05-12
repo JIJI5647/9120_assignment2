@@ -79,9 +79,21 @@ def getCarSalesSummary():
     :param search_string: The search string to use for finding car sales in the database.
     :return: A list of car sales matching the search string.
 """
+
+
+
 def findCarSales(searchString):
-    A = F"select .. where == {searchString}"
-    return
+    #A = F"select .. where == {searchString}"
+    query = f"""
+    SELECT * FROM CarSalesFormatted 
+    WHERE (MakeName ILIKE '%{searchString}%' 
+           OR ModelName ILIKE '%{searchString}%' 
+           OR BuyerID ILIKE '%{searchString}%' 
+           OR SalespersonID ILIKE '%{searchString}%')
+    AND (IsSold = FALSE OR SaleDate > CURRENT_DATE - INTERVAL '3 years')
+    ORDER BY IsSold DESC, SaleDate ASC, MakeName, ModelName
+    """
+    return executeQuery(query)
 
 """
     Adds a new car sale to the database.
@@ -93,8 +105,34 @@ def findCarSales(searchString):
     :param car_sale: The CarSale object to be added to the database.
     :return: A boolean indicating if the operation was successful or not.
 """
+
+
+
 def addCarSale(make, model, builtYear, odometer, price):
-    return
+    
+    if odometer <= 0 or price <= 0:
+        return False
+    
+    query_check_make = f"SELECT * FROM Make WHERE MakeName = '{make}'"
+    make_result = executeQuery(query_check_make)
+    if not make_result:
+        return False
+    
+    query_check_make = f"""
+    SELECT * FROM Model 
+    WHERE ModelName = '{model}' 
+    AND MakeCode = (SELECT MakeCode FROM Make WHERE MakeName = '{make}')
+    """
+    model_result = executeQuery(query_check_make)
+    if not model_result:
+        return False
+    
+    query_insert = f"""
+    INSERT INTO CarSales (MakeCode, ModelCode, BuiltYear, Odometer, Price, IsSold)
+    VALUES ('{make}', '{model}', {builtYear}, {odometer}, {price}, FALSE)
+    """
+    executeQuery(query_insert)
+    return True
 
 """
     Updates an existing car sale in the database.
@@ -106,6 +144,9 @@ def addCarSale(make, model, builtYear, odometer, price):
     :param car_sale: The CarSale object containing updated details for the car sale.
     :return: A boolean indicating whether the update was successful or not.
 """
+
+
+
 def updateCarSale(carsaleid, customer, salesperosn, saledate):
     return
 
