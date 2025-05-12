@@ -54,8 +54,8 @@ def executeQuery(query):
 Validate salesperson based on username and password
 '''
 def checkLogin(login, password):
-
-    return ['jdoe', 'John', 'Doe']
+    res = executeQuery(f"SELECT UserName, FirstName, LastName FROM SalesPerson WHERE UserName = '{login}' AND Password = '{password}'")
+    return res["data"][0] if res["code"] == 200 else None
 
 
 """
@@ -68,7 +68,21 @@ def checkLogin(login, password):
     :return: A list of car sale summaries.
 """
 def getCarSalesSummary():
-    return
+    res = executeQuery("SELECT * FROM CarSalesSummary ORDER BY MakeName, ModelName ASC")
+    if res["code"] != 200:
+        print("Error fetching car sales summary:", res["message"])
+        return []
+    return [
+    {
+        'make': row[0],
+        'model': row[1],
+        'availableUnits': row[2] or 0,
+        'soldUnits': row[3] or 0,
+        'soldTotalPrices' : row[4] or 0,
+        'lastPurchaseAt': row[5] or '',
+    }
+    for row in res["data"]
+    ]
 
 """
     Finds car sales based on the provided search string.
