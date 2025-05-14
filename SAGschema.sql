@@ -123,7 +123,45 @@ SELECT
     IsSold,
     BuyerID,
     SalespersonID,
-    TO_CHAR(SaleDate, 'DD/MM/YYYY') AS SaleDate
+    TO_CHAR(SaleDate, 'DD-MM-YYYY') AS SaleDate
 FROM CarSales;
 
-SELECT * FROM CarSalesFormatted;
+CREATE VIEW AvailableUnits AS
+SELECT 
+    MakeCode,
+    ModelCode,
+    count(*) AS AvailableUnit
+FROM CarSales
+WHERE IsSold = FALSE
+GROUP BY MakeCode, ModelCode;
+
+
+CREATE VIEW SoldUnits AS 
+SELECT 
+    MakeCode,
+    ModelCode,
+    count(*) AS SoldUnit,
+	sum(Price) AS totalSales,
+	TO_CHAR(max(SaleDate), 'DD-MM-YYYY') AS LastPurchase
+FROM CarSales
+WHERE IsSold = TRUE
+GROUP BY MakeCode, ModelCode;
+
+CREATE OR REPLACE VIEW CarSalesSummary AS
+SELECT
+    mk.MakeName,
+    mo.ModelName,
+    au.AvailableUnit,
+    su.SoldUnit,
+    su.totalSales AS TotalSales,
+    su.LastPurchase
+FROM 
+    Model mo
+    JOIN Make mk ON mo.MakeCode = mk.MakeCode
+    LEFT JOIN AvailableUnits au ON mo.ModelCode = au.ModelCode AND mo.MakeCode = au.MakeCode
+    LEFT JOIN SoldUnits su ON mo.ModelCode = su.ModelCode AND mo.MakeCode = su.MakeCode;
+
+
+SELECT * FROM CarSalesSummary ORDER BY MakeName, ModelName ASC ;
+
+SELECT * FROM CarSales Natural Join Model Natural Join Make
