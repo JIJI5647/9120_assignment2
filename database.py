@@ -94,7 +94,6 @@ def getCarSalesSummary():
     :return: A list of car sales matching the search string.
 """
 def findCarSales(searchString):
-    A = F"select .. where == {searchString}"
     return
 
 """
@@ -120,8 +119,56 @@ def addCarSale(make, model, builtYear, odometer, price):
     :param car_sale: The CarSale object containing updated details for the car sale.
     :return: A boolean indicating whether the update was successful or not.
 """
-def updateCarSale(carsaleid, customer, salesperosn, saledate):
-    return
+def updateCarSale(carsaleid, customer, salesperson, saledate):
+        # open the database and make a connection
+    conn = openConnection()
+    if not conn:
+        print("Error: Database connection failed.")
+        return "Database connection failed"
+    try:
+        with conn.cursor() as cursor:
+            # Verify whether the CustomerID exists in the Customer table
+            cursor.execute("SELECT 1 FROM Customer WHERE CustomerID = %s", (customer,))
+            if cursor.fetchone() is None:
+                print("Error: Invalid Customer ID.")
+                return "Invalid Customer ID"
+
+            # Verify whether the Salesperson Username exists in the Salesperson table, with case-insensitive
+            cursor.execute("SELECT 1 FROM Salesperson WHERE LOWER(UserName) = LOWER(%s)", (salesperson,))
+            if cursor.fetchone() is None:
+                print("Error: Invalid Salesperson Username.")
+                return "Invalid Salesperson Username"
+
+            # Validate that the sale date is not later than the current date, if date is provided
+            if saledate:
+                cursor.execute("SELECT CURRENT_DATE")
+                current_date = cursor.fetchone()[0]
+                if saledate > current_date:
+                    print("Error: Sale date cannot be later than the current date.")
+                    return "Sale Date Cannot Be Future"
+
+            # Update the sale record
+            cursor.execute("""
+                UPDATE CarSales
+                SET BuyerID = %s,
+                    SalespersonID = (SELECT UserName FROM Salesperson WHERE LOWER(UserName) = LOWER(%s)),
+                    SaleDate = %s,
+                    IsSold = TRUE
+                WHERE CarSaleID = %s
+            """, (customer, salesperson, saledate, carsaleid))
+
+            # Commit the transaction to ensure changes have been saved
+            conn.commit()
+            print("Update successful.")
+            return "Success"
+    except psycopg2.Error as e:
+        # Rollback the transaction on error to prevent data inconsistency
+        conn.rollback()
+        print("Database error:", e.pgerror)
+        return f"Database Error: {e.pgerror}"
+    finally:
+        # Always close the connection, regardless of errors
+        conn.close()
 
 if __name__ == "__main__":
     print(executeQuery("SELECT * FROM CarSalesFormatted"))
