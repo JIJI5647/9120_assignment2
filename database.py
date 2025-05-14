@@ -40,8 +40,13 @@ def executeQuery(query):
         # Execute the query
         cursor.execute(query)
 
-        # Fetch all results
-        results = cursor.fetchall()
+        if query.strip().lower().startswith("select"):
+            results = cursor.fetchall()
+        else:
+            results = cursor.rowcount
+            if results == 0 :
+                return {"code": 500, "message": "No effect on database", "data": None}
+            conn.commit()
         return {"code": 200, "message": "Query executed successfully.", "data": results}
     except psycopg2.Error as sqle:
         print("psycopg2.Error : " + sqle.pgerror)
@@ -97,17 +102,47 @@ def getCarSalesSummary():
 
 
 def findCarSales(searchString):
-    #A = F"select .. where == {searchString}"
     query = f"""
-    SELECT * FROM CarSalesFormatted 
-    WHERE (MakeName ILIKE '%{searchString}%' 
-           OR ModelName ILIKE '%{searchString}%' 
-           OR BuyerID ILIKE '%{searchString}%' 
-           OR SalespersonID ILIKE '%{searchString}%')
-    AND (IsSold = FALSE OR SaleDate > CURRENT_DATE - INTERVAL '3 years')
-    ORDER BY IsSold DESC, SaleDate ASC, MakeName, ModelName
-    """
-    return executeQuery(query)
+        SELECT 
+            CarSaleID,
+            MakeName,
+            ModelName,
+            BuiltYear,
+            Odometer,
+            Price,
+            IsSold,
+            SaleDate_dis,
+            BuyerName,
+            Salesperson
+        FROM CarSalesFormatted
+        WHERE (
+            MakeName ILIKE '%{searchString}%' 
+            OR ModelName ILIKE '%{searchString}%' 
+            OR BuyerName ILIKE '%{searchString}%' 
+            OR Salesperson ILIKE '%{searchString}%'
+        )
+        AND (IsSold = FALSE OR SaleDate > CURRENT_DATE - INTERVAL '3 years')
+        ORDER BY IsSold DESC, SaleDate ASC, MakeName, ModelName
+        """
+    res = executeQuery(query)
+    print(res)
+    return [
+    {
+        'carsale_id': row[0],
+        'make': row[1] or '',
+        'model': row[2] or '',
+        'builtYear': row[3] if row[3] is not None else 0,
+        'odometer': row[4] if row[4] is not None else 0,
+        'price': row[5] if row[5] is not None else 0,
+        'isSold': row[6],  
+        'sale_date': row[7] or '',
+        'buyer': row[8] or '',
+        'salesperson': row[9] or ''
+    }
+    for row in res["data"]
+    ]
+
+
 
 
 """
@@ -125,29 +160,17 @@ def findCarSales(searchString):
 
 def addCarSale(make, model, builtYear, odometer, price):
     
-    if odometer <= 0 or price <= 0:
-        return False
-    
-    query_check_make = f"SELECT * FROM Make WHERE MakeName = '{make}'"
-    make_result = executeQuery(query_check_make)
-    if not make_result:
-        return False
-    
-    query_check_make = f"""
-    SELECT * FROM Model 
-    WHERE ModelName = '{model}' 
-    AND MakeCode = (SELECT MakeCode FROM Make WHERE MakeName = '{make}')
-    """
-    model_result = executeQuery(query_check_make)
-    if not model_result:
+    if int(odometer) < 0 or int(price) <= 0 :
         return False
     
     query_insert = f"""
     INSERT INTO CarSales (MakeCode, ModelCode, BuiltYear, Odometer, Price, IsSold)
     VALUES ('{make}', '{model}', {builtYear}, {odometer}, {price}, FALSE)
     """
-    executeQuery(query_insert)
-    return True
+
+    result = executeQuery(query_insert)
+    print(result)
+    return True if result["code"] == 200 else False
 
 """
     Updates an existing car sale in the database.
@@ -165,28 +188,20 @@ def updateCarSale(carsaleid, customer, salesperson, saledate):
     conn = openConnection()
     if not conn:
         print("Error: Database connection failed.")
-        return "Database connection failed"
+        return False
     try:
         with conn.cursor() as cursor:
             # Verify whether the CustomerID exists in the Customer table
             cursor.execute("SELECT 1 FROM Customer WHERE CustomerID = %s", (customer,))
             if cursor.fetchone() is None:
                 print("Error: Invalid Customer ID.")
-                return "Invalid Customer ID"
+                return 
 
             # Verify whether the Salesperson Username exists in the Salesperson table, with case-insensitive
             cursor.execute("SELECT 1 FROM Salesperson WHERE LOWER(UserName) = LOWER(%s)", (salesperson,))
             if cursor.fetchone() is None:
                 print("Error: Invalid Salesperson Username.")
                 return "Invalid Salesperson Username"
-
-            # Validate that the sale date is not later than the current date, if date is provided
-            if saledate:
-                cursor.execute("SELECT CURRENT_DATE")
-                current_date = cursor.fetchone()[0]
-                if saledate > current_date:
-                    print("Error: Sale date cannot be later than the current date.")
-                    return "Sale Date Cannot Be Future"
 
             # Update the sale record
             cursor.execute("""
@@ -201,12 +216,12 @@ def updateCarSale(carsaleid, customer, salesperson, saledate):
             # Commit the transaction to ensure changes have been saved
             conn.commit()
             print("Update successful.")
-            return "Success"
+            return True
     except psycopg2.Error as e:
         # Rollback the transaction on error to prevent data inconsistency
         conn.rollback()
         print("Database error:", e.pgerror)
-        return f"Database Error: {e.pgerror}"
+        return False
     finally:
         # Always close the connection, regardless of errors
         conn.close()

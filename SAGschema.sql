@@ -114,17 +114,22 @@ INSERT INTO CarSales (
 
 CREATE VIEW CarSalesFormatted AS
 SELECT
-    CarSaleID,
-    MakeCode,
-    ModelCode,
-    BuiltYear,
-    Odometer,
-    Price,
-    IsSold,
-    BuyerID,
-    SalespersonID,
-    TO_CHAR(SaleDate, 'DD-MM-YYYY') AS SaleDate
-FROM CarSales;
+	CarSaleID,
+	ma.MakeName,
+	mo.ModelName,
+	BuiltYear,
+	Odometer,
+	Price,
+	IsSold,
+	SaleDate,
+	TO_CHAR(SaleDate, 'DD-MM-YYYY') AS SaleDate_dis,
+	c.FirstName || ' ' || c.LastName AS BuyerName,
+	sp.FirstName || ' ' || sp.LastName AS Salesperson
+FROM CarSales cs 
+LEFT JOIN MAKE ma ON cs.MakeCode = ma.MakeCode
+LEFT JOIN MODEL mo ON cs.ModelCode = mo.ModelCode
+LEFT JOIN Customer c ON cs.BuyerID = c.CustomerID
+LEFT JOIN Salesperson sp ON cs.SalespersonID = sp.UserName;
 
 CREATE VIEW AvailableUnits AS
 SELECT 
@@ -147,7 +152,7 @@ FROM CarSales
 WHERE IsSold = TRUE
 GROUP BY MakeCode, ModelCode;
 
-CREATE OR REPLACE VIEW CarSalesSummary AS
+CREATE VIEW CarSalesSummary AS
 SELECT
     mk.MakeName,
     mo.ModelName,
@@ -162,6 +167,30 @@ FROM
     LEFT JOIN SoldUnits su ON mo.ModelCode = su.ModelCode AND mo.MakeCode = su.MakeCode;
 
 
-SELECT * FROM CarSalesSummary ORDER BY MakeName, ModelName ASC ;
+DROP FUNCTION if EXISTS check_new_car;
 
-SELECT * FROM CarSales Natural Join Model Natural Join Make
+CREATE FUNCTION check_new_car() RETURNS trigger AS $$
+BEGIN
+	IF NEW.SALEDATE > CURRENT_DATE THEN 
+		RAISE EXCEPTION 'SaleDate cannot bigger than current date!';
+	END IF;
+	
+	IF NEW.odometer < 0 THEN
+		RAISE EXCEPTION 'Odometer cannot be negative!';
+	END IF;
+	
+	IF NEW.PRICE < 0 THEN
+		RAISE EXCEPTION 'Price cannot be negative!';
+	END IF;
+	
+	RETURN NEW;
+	
+END; $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS insert_car_trigger ON CarSales;
+
+CREATE TRIGGER insert_car_trigger BEFORE UPDATE OR INSERT ON CarSales
+FOR EACH ROW EXECUTE FUNCTION check_new_car();
+
+SELECT * FROM CarSales
+	
