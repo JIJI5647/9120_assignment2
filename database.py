@@ -40,14 +40,7 @@ def executeQuery(query,params = None):
 
         # Execute the query
         cursor.execute(query,params)
-
-        if query.strip().lower().startswith("select"):
-            results = cursor.fetchall()
-        else:
-            results = cursor.rowcount
-            if results == 0 :
-                return {"code": 500, "message": "No effect on database", "data": None}
-            conn.commit()
+        results = cursor.fetchall()
         conn.commit()
         return {"code": 200, "message": "Query executed successfully.", "data": results}
     except psycopg2.Error as sqle:

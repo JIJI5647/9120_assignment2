@@ -276,13 +276,13 @@ BEGIN
     WHERE  CarSaleID = n_carsaleid;
 
     IF FOUND THEN
-        RETURN 'True';
+        RETURN True;
     ELSE
-        RETURN 'False';
+        RETURN False;
     END IF;
 EXCEPTION
     WHEN OTHERS THEN
-        RETURN 'Update failed: ' || SQLERRM;
+        RETURN FALSE;
 END;
 $$;
 
