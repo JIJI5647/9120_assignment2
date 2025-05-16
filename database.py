@@ -64,7 +64,7 @@ def checkLogin(login, password):
         cursor = conn.cursor()
         cursor.execute("SELECT UserName, FirstName, LastName FROM SalesPerson WHERE UserName = %s AND Password = %s",(login, password))
         res = cursor.fetchall()
-        return res[0]
+        return res[0] if res != [] else None
     except psycopg2.Error as sqle:
         print(psycopg2.Error)
         return None
