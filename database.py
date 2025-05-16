@@ -5,6 +5,7 @@ import psycopg2
 ##  Database Connection
 #####################################################
 
+# ZMJ EDIT ON 2025_5_16
 def openConnection():
     # connection parameters - ENTER YOUR LOGIN AND PASSWORD HERE
 
@@ -37,7 +38,7 @@ def checkLogin(login, password):
         return None
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT UserName, FirstName, LastName FROM SalesPerson WHERE UserName = %s AND Password = %s",(login, password))
+        cursor.execute("SELECT UserName, FirstName, LastName FROM SalesPerson WHERE LOWER(UserName) = LOWER(%s) AND Password = %s",(login, password))
         res = cursor.fetchall()
         return res[0] if res != [] else None
     except psycopg2.Error as sqle:
@@ -181,6 +182,7 @@ def addCarSale(make, model, builtYear, odometer, price):
         cursor.execute(query_insert, params)
         result = cursor.fetchone()
         print(result)
+        conn.commit()
         return True if result and result[0] == True else False
     except psycopg2.Error as e:
         print("Database error:", e)
@@ -204,7 +206,6 @@ def addCarSale(make, model, builtYear, odometer, price):
 def updateCarSale(carsaleid, customer, salesperson, saledate):
     query_update = "SELECT update_car_sale(%s, %s, %s, %s);"
     params = (carsaleid, customer, salesperson, saledate)
-
     try:
         conn = openConnection()
         if not conn:
@@ -212,6 +213,7 @@ def updateCarSale(carsaleid, customer, salesperson, saledate):
         cursor = conn.cursor()
         cursor.execute(query_update, params)
         result = cursor.fetchone()
+        conn.commit()
         print(result)
         return True if result and result[0] == True else False
     except psycopg2.Error as e:
@@ -220,7 +222,3 @@ def updateCarSale(carsaleid, customer, salesperson, saledate):
     finally:
         if conn:
             conn.close()
-
-
-if __name__ == "__main__":
-    print(executeQuery("SELECT * FROM CarSalesFormatted"))

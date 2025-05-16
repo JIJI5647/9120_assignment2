@@ -263,7 +263,7 @@ CREATE FUNCTION update_car_sale(
     n_salesperson TEXT,
     n_saledate DATE
 )
-RETURNS TEXT
+RETURNS BOOLEAN
 LANGUAGE plpgsql
 AS $$
 BEGIN
@@ -286,4 +286,5 @@ EXCEPTION
 END;
 $$;
 
-SELECT update_car_sale(1, 'notexist', 'jdoe', '2024-05-01');
+SELECT update_car_sale(18, 'c001', 'jdoe', '2024-05-01');
+SELECT * FROM CarSales WHERE carsaleid = 18
