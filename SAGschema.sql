@@ -167,14 +167,10 @@ FROM
     LEFT JOIN SoldUnits su ON mo.ModelCode = su.ModelCode AND mo.MakeCode = su.MakeCode;
 
 
-DROP FUNCTION if EXISTS check_new_car;
+DROP FUNCTION if EXISTS check_new_car CASCADE;
 
 CREATE FUNCTION check_new_car() RETURNS trigger AS $$
 BEGIN
-	IF NEW.SALEDATE > CURRENT_DATE THEN 
-		RAISE EXCEPTION 'SaleDate cannot bigger than current date!';
-	END IF;
-	
 	IF NEW.odometer < 0 THEN
 		RAISE EXCEPTION 'Odometer cannot be negative!';
 	END IF;
@@ -188,9 +184,106 @@ BEGIN
 END; $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS insert_car_trigger ON CarSales;
-
-CREATE TRIGGER insert_car_trigger BEFORE UPDATE OR INSERT ON CarSales
+CREATE TRIGGER insert_car_trigger BEFORE INSERT ON CarSales
 FOR EACH ROW EXECUTE FUNCTION check_new_car();
 
-SELECT * FROM CarSales
+DROP FUNCTION IF EXISTS update_car CASCADE;
+CREATE FUNCTION update_car() RETURNS trigger AS $$ 
+BEGIN
+	IF NEW.SALEDATE IS NULL OR NEW.SALEDATE > CURRENT_DATE THEN 
+		RAISE EXCEPTION 'SaleDate ERROR!';
+	END IF;
 	
+	IF NEW.BuyerID IS NULL OR NOT EXISTS(
+		SELECT 1 FROM Customer WHERE CustomerID = NEW.BuyerID
+	) THEN
+	RAISE EXCEPTION 'Buyer NOT EXISTS!';
+	END IF;
+
+	IF NEW.SalespersonID IS NULL OR NOT EXISTS(
+		SELECT 1 FROM Salesperson WHERE UserName = NEW.SalespersonID
+	) THEN
+	RAISE EXCEPTION 'Salesperson NOT EXISTS!';
+	END IF;
+	
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+
+DROP TRIGGER IF EXISTS T_update_car ON CarSales; 
+CREATE TRIGGER T_update_car BEFORE UPDATE ON CarSales
+FOR EACH ROW 
+EXECUTE FUNCTION update_car();
+
+CREATE OR REPLACE FUNCTION add_car_sale(
+    make_name TEXT,
+    model_name TEXT,
+    built_year INTEGER,
+    odometer INTEGER,
+    price NUMERIC
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    make_code VARCHAR(10);
+    model_code VARCHAR(10);
+BEGIN
+    SELECT MakeCode INTO make_code
+    FROM Make
+    WHERE LOWER(MakeName) = LOWER(make_name);
+
+    IF make_code IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    SELECT ModelCode INTO model_code
+    FROM Model
+    WHERE LOWER(ModelName) = LOWER(model_name)
+      AND MakeCode = make_code;
+
+    IF model_code IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    INSERT INTO CarSales (MakeCode, ModelCode, BuiltYear, Odometer, Price, IsSold)
+    VALUES (make_code, model_code, built_year, odometer, price, FALSE);
+
+    RETURN TRUE;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP FUNCTION IF EXISTS update_car_sale;
+
+CREATE FUNCTION update_car_sale(
+    n_carsaleid INTEGER,
+    n_customer TEXT,
+    n_salesperson TEXT,
+    n_saledate DATE
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE CarSales
+    SET 
+        BuyerID = (SELECT CustomerID FROM Customer WHERE LOWER(CustomerID) = LOWER(n_customer)),
+        SalespersonID = (SELECT UserName FROM Salesperson WHERE LOWER(UserName) = LOWER(n_salesperson)),
+        SaleDate = n_saledate,
+        IsSold = TRUE
+    WHERE  CarSaleID = n_carsaleid;
+
+    IF FOUND THEN
+        RETURN 'True';
+    ELSE
+        RETURN 'False';
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN 'Update failed: ' || SQLERRM;
+END;
+$$;
+
+SELECT update_car_sale(1, 'notexist', 'jdoe', '2024-05-01');

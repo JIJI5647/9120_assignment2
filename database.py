@@ -27,7 +27,8 @@ def openConnection():
     # return the connection to use
     return conn
 
-def executeQuery(query):
+# execute the query in database
+def executeQuery(query,params = None):
     # Open a connection to the database
     conn = openConnection()
     if not conn: 
@@ -38,7 +39,7 @@ def executeQuery(query):
         cursor = conn.cursor()
 
         # Execute the query
-        cursor.execute(query)
+        cursor.execute(query,params)
 
         if query.strip().lower().startswith("select"):
             results = cursor.fetchall()
@@ -47,19 +48,23 @@ def executeQuery(query):
             if results == 0 :
                 return {"code": 500, "message": "No effect on database", "data": None}
             conn.commit()
+        conn.commit()
         return {"code": 200, "message": "Query executed successfully.", "data": results}
     except psycopg2.Error as sqle:
         print("psycopg2.Error : " + sqle.pgerror)
         if conn:
             conn.rollback()
         return {"code": 500, "message": sqle.pgerror, "data": None}
+    finally:
+        if conn:
+            conn.close()
 
 
 '''
 Validate salesperson based on username and password
 '''
 def checkLogin(login, password):
-    res = executeQuery(f"SELECT UserName, FirstName, LastName FROM SalesPerson WHERE UserName = '{login}' AND Password = '{password}'")
+    res = executeQuery("SELECT UserName, FirstName, LastName FROM SalesPerson WHERE UserName = %s AND Password = %s",(login, password))
     return res["data"][0] if res["code"] == 200 else None
 
 
@@ -74,8 +79,7 @@ def checkLogin(login, password):
 """
 def getCarSalesSummary():
     res = executeQuery("SELECT * FROM CarSalesSummary ORDER BY MakeName, ModelName ASC")
-    if res["code"] != 200:
-        print("Error fetching car sales summary:", res["message"])
+    if res["code"] != 200 or not res["data"]:
         return []
     return [
     {
@@ -102,7 +106,7 @@ def getCarSalesSummary():
 
 
 def findCarSales(searchString):
-    query = f"""
+    query = """
         SELECT 
             CarSaleID,
             MakeName,
@@ -116,16 +120,17 @@ def findCarSales(searchString):
             Salesperson
         FROM CarSalesFormatted
         WHERE (
-            MakeName ILIKE '%{searchString}%' 
-            OR ModelName ILIKE '%{searchString}%' 
-            OR BuyerName ILIKE '%{searchString}%' 
-            OR Salesperson ILIKE '%{searchString}%'
+            MakeName ILIKE '%%' || %s || '%%' 
+            OR ModelName ILIKE '%%' || %s || '%%' 
+            OR BuyerName ILIKE '%%' || %s || '%%' 
+            OR Salesperson ILIKE '%%' || %s || '%%'
         )
         AND (IsSold = FALSE OR SaleDate > CURRENT_DATE - INTERVAL '3 years')
         ORDER BY IsSold DESC, SaleDate ASC, MakeName, ModelName
-        """
-    res = executeQuery(query)
-    print(res)
+    """
+
+
+    params = (searchString, searchString, searchString, searchString)
     return [
     {
         'carsale_id': row[0],
@@ -139,7 +144,7 @@ def findCarSales(searchString):
         'buyer': row[8] or '',
         'salesperson': row[9] or ''
     }
-    for row in res["data"]
+    for row in executeQuery(query, params)["data"]
     ]
 
 
@@ -159,18 +164,11 @@ def findCarSales(searchString):
 
 
 def addCarSale(make, model, builtYear, odometer, price):
-    
-    if int(odometer) < 0 or int(price) <= 0 :
-        return False
-    
-    query_insert = f"""
-    INSERT INTO CarSales (MakeCode, ModelCode, BuiltYear, Odometer, Price, IsSold)
-    VALUES ('{make}', '{model}', {builtYear}, {odometer}, {price}, FALSE)
-    """
-
-    result = executeQuery(query_insert)
-    print(result)
-    return True if result["code"] == 200 else False
+    query_insert = "SELECT add_car_sale(%s, %s, %s, %s, %s);"
+    params = (make, model, builtYear, odometer, price)
+    result = executeQuery(query_insert, params)
+    print(result['data'])
+    return True if result["code"] == 200 and result["data"][0][0] == True else False
 
 """
     Updates an existing car sale in the database.
@@ -184,47 +182,12 @@ def addCarSale(make, model, builtYear, odometer, price):
 """
 
 def updateCarSale(carsaleid, customer, salesperson, saledate):
-        # open the database and make a connection
-    conn = openConnection()
-    if not conn:
-        print("Error: Database connection failed.")
-        return False
-    try:
-        with conn.cursor() as cursor:
-            # Verify whether the CustomerID exists in the Customer table
-            cursor.execute("SELECT 1 FROM Customer WHERE CustomerID = %s", (customer,))
-            if cursor.fetchone() is None:
-                print("Error: Invalid Customer ID.")
-                return 
-
-            # Verify whether the Salesperson Username exists in the Salesperson table, with case-insensitive
-            cursor.execute("SELECT 1 FROM Salesperson WHERE LOWER(UserName) = LOWER(%s)", (salesperson,))
-            if cursor.fetchone() is None:
-                print("Error: Invalid Salesperson Username.")
-                return "Invalid Salesperson Username"
-
-            # Update the sale record
-            cursor.execute("""
-                UPDATE CarSales
-                SET BuyerID = %s,
-                    SalespersonID = (SELECT UserName FROM Salesperson WHERE LOWER(UserName) = LOWER(%s)),
-                    SaleDate = %s,
-                    IsSold = TRUE
-                WHERE CarSaleID = %s
-            """, (customer, salesperson, saledate, carsaleid))
-
-            # Commit the transaction to ensure changes have been saved
-            conn.commit()
-            print("Update successful.")
-            return True
-    except psycopg2.Error as e:
-        # Rollback the transaction on error to prevent data inconsistency
-        conn.rollback()
-        print("Database error:", e.pgerror)
-        return False
-    finally:
-        # Always close the connection, regardless of errors
-        conn.close()
+    # open the database and make a connection
+    query_update = "SELECT update_car_sale(%s, %s, %s, %s)"
+    params = (carsaleid, customer, salesperson, saledate)
+    result = executeQuery(query_update, params)
+    print(result)
+    return True if result["code"] == 200 and result["data"][0][0] == True else False
 
 if __name__ == "__main__":
     print(executeQuery("SELECT * FROM CarSalesFormatted"))
