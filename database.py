@@ -57,8 +57,18 @@ def executeQuery(query,params = None):
 Validate salesperson based on username and password
 '''
 def checkLogin(login, password):
-    res = executeQuery("SELECT UserName, FirstName, LastName FROM SalesPerson WHERE UserName = %s AND Password = %s",(login, password))
-    return res["data"][0] if res["code"] == 200 else None
+    conn = openConnection()
+    if not conn:
+        return None
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT UserName, FirstName, LastName FROM SalesPerson WHERE UserName = %s AND Password = %s",(login, password))
+        res = cursor.fetchall()
+        return res[0]
+    except psycopg2.Error as sqle:
+        print(psycopg2.Error)
+        return None
+    
 
 
 """
