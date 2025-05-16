@@ -27,31 +27,6 @@ def openConnection():
     # return the connection to use
     return conn
 
-# execute the query in database
-def executeQuery(query,params = None):
-    # Open a connection to the database
-    conn = openConnection()
-    if not conn: 
-        print("Failed to connect to the database.")
-        return {"code": 500, "message": "Failed to connect to the database.", "data": None}
-    try:
-        # Create a cursor object
-        cursor = conn.cursor()
-
-        # Execute the query
-        cursor.execute(query,params)
-        results = cursor.fetchall()
-        conn.commit()
-        return {"code": 200, "message": "Query executed successfully.", "data": results}
-    except psycopg2.Error as sqle:
-        print("psycopg2.Error : " + sqle.pgerror)
-        if conn:
-            conn.rollback()
-        return {"code": 500, "message": sqle.pgerror, "data": None}
-    finally:
-        if conn:
-            conn.close()
-
 
 '''
 Validate salesperson based on username and password
@@ -81,20 +56,36 @@ def checkLogin(login, password):
     :return: A list of car sale summaries.
 """
 def getCarSalesSummary():
-    res = executeQuery("SELECT * FROM CarSalesSummary ORDER BY MakeName, ModelName ASC")
-    if res["code"] != 200 or not res["data"]:
+    try:
+        conn = openConnection()
+        if not conn:
+            return []
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM CarSalesSummary ORDER BY MakeName, ModelName ASC")
+        data = cursor.fetchall()
+
+        if not data:
+            return []
+
+        result = []
+        for row in data:
+            result.append({
+                'make': row[0],
+                'model': row[1],
+                'availableUnits': row[2] or 0,
+                'soldUnits': row[3] or 0,
+                'soldTotalPrices': row[4] or 0,
+                'lastPurchaseAt': row[5] or ''
+            })
+
+        return result
+    except psycopg2.Error as e:
+        print("Database error:", e)
         return []
-    return [
-    {
-        'make': row[0],
-        'model': row[1],
-        'availableUnits': row[2] or 0,
-        'soldUnits': row[3] or 0,
-        'soldTotalPrices' : row[4] or 0,
-        'lastPurchaseAt': row[5] or '',
-    }
-    for row in res["data"]
-    ]
+    finally:
+        if conn:
+            conn.close()
 
 """
     Finds car sales based on the provided search string.
@@ -131,25 +122,37 @@ def findCarSales(searchString):
         AND (IsSold = FALSE OR SaleDate > CURRENT_DATE - INTERVAL '3 years')
         ORDER BY IsSold DESC, SaleDate ASC, MakeName, ModelName
     """
-
-
     params = (searchString, searchString, searchString, searchString)
-    return [
-    {
-        'carsale_id': row[0],
-        'make': row[1] or '',
-        'model': row[2] or '',
-        'builtYear': row[3] if row[3] is not None else 0,
-        'odometer': row[4] if row[4] is not None else 0,
-        'price': row[5] if row[5] is not None else 0,
-        'isSold': row[6],  
-        'sale_date': row[7] or '',
-        'buyer': row[8] or '',
-        'salesperson': row[9] or ''
-    }
-    for row in executeQuery(query, params)["data"]
-    ]
 
+    try:
+        conn = openConnection()
+        if not conn:
+            return []
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        return [
+            {
+                'carsale_id': row[0],
+                'make': row[1] or '',
+                'model': row[2] or '',
+                'builtYear': row[3] if row[3] is not None else 0,
+                'odometer': row[4] if row[4] is not None else 0,
+                'price': row[5] if row[5] is not None else 0,
+                'isSold': row[6],
+                'sale_date': row[7] or '',
+                'buyer': row[8] or '',
+                'salesperson': row[9] or ''
+            }
+            for row in rows
+        ]
+    except psycopg2.Error as e:
+        print("Database error:", e)
+        return []
+    finally:
+        if conn:
+            conn.close()
 
 
 
@@ -169,9 +172,22 @@ def findCarSales(searchString):
 def addCarSale(make, model, builtYear, odometer, price):
     query_insert = "SELECT add_car_sale(%s, %s, %s, %s, %s);"
     params = (make, model, builtYear, odometer, price)
-    result = executeQuery(query_insert, params)
-    print(result['data'])
-    return True if result["code"] == 200 and result["data"][0][0] == True else False
+
+    try:
+        conn = openConnection()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        cursor.execute(query_insert, params)
+        result = cursor.fetchone()
+        print(result)
+        return True if result and result[0] == True else False
+    except psycopg2.Error as e:
+        print("Database error:", e)
+        return False
+    finally:
+        if conn:
+            conn.close()
 
 """
     Updates an existing car sale in the database.
@@ -184,13 +200,27 @@ def addCarSale(make, model, builtYear, odometer, price):
     :return: A boolean indicating whether the update was successful or not.
 """
 
+
 def updateCarSale(carsaleid, customer, salesperson, saledate):
-    # open the database and make a connection
-    query_update = "SELECT update_car_sale(%s, %s, %s, %s)"
+    query_update = "SELECT update_car_sale(%s, %s, %s, %s);"
     params = (carsaleid, customer, salesperson, saledate)
-    result = executeQuery(query_update, params)
-    print(result)
-    return True if result["code"] == 200 and result["data"][0][0] == True else False
+
+    try:
+        conn = openConnection()
+        if not conn:
+            return False
+        cursor = conn.cursor()
+        cursor.execute(query_update, params)
+        result = cursor.fetchone()
+        print(result)
+        return True if result and result[0] == True else False
+    except psycopg2.Error as e:
+        print("Database error:", e)
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 
 if __name__ == "__main__":
     print(executeQuery("SELECT * FROM CarSalesFormatted"))
